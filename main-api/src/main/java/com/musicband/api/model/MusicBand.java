@@ -34,8 +34,7 @@ public class MusicBand {
     private Integer id;
 
     @NotBlank(message = "Name cannot be null or empty")
-    @Size(max = 255, message = "Name cannot exceed 255 characters")
-    @Column(nullable = false, length = 255)
+    @Column(nullable = false, columnDefinition = "TEXT")
     @XmlElement(required = true)
     private String name;
 

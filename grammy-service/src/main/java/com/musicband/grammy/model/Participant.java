@@ -29,14 +29,13 @@ public class Participant {
     private Integer id;
 
     @NotBlank(message = "Name cannot be null or empty")
-    @Size(max = 255, message = "Name cannot exceed 255 characters")
-    @Column(nullable = false, length = 255)
+    @Column(nullable = false, columnDefinition = "TEXT")
+
     @XmlElement(name = "n", required = true)
     private String name;
 
     @NotBlank(message = "Role cannot be null or empty")
-    @Size(max = 255, message = "Role cannot exceed 255 characters")
-    @Column(nullable = false, length = 255)
+    @Column(nullable = false, columnDefinition = "TEXT")
     @XmlElement(required = true)
     private String role;
 
@@ -46,8 +45,7 @@ public class Participant {
     @XmlJavaTypeAdapter(LocalDateAdapter.class)
     private LocalDate joinDate;
 
-    @Size(max = 255, message = "Instrument cannot exceed 255 characters")
-    @Column(length = 255)
+    @Column(columnDefinition = "TEXT")
     @XmlElement
     private String instrument;
 

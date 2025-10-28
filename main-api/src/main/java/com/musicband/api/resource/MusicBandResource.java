@@ -1,9 +1,7 @@
 package com.musicband.api.resource;
 
-import com.musicband.api.model.AverageParticipantsResponse;
-import com.musicband.api.model.BandsResponse;
+import com.musicband.api.model.*;
 import com.musicband.api.model.Error;
-import com.musicband.api.model.MusicBand;
 import com.musicband.api.service.MusicBandService;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
@@ -13,14 +11,12 @@ import jakarta.ws.rs.core.Response;
 
 import java.util.*;
 
-
 @Path("/bands")
 public class MusicBandResource {
 
     @Inject
     private MusicBandService service;
 
-    
     @GET
     @Produces(MediaType.APPLICATION_XML)
     public Response getBands(
@@ -48,25 +44,6 @@ public class MusicBandResource {
             }
 
             BandsResponse response = service.getAllBands(page, size, sort, filters);
-
-
-            System.out.println("=== DEBUG Bands Response ===");
-            System.out.println("Total bands: " + response.getBands().size());
-            System.out.println("Total elements: " + response.getTotalElements());
-
-            for (int i = 0; i < response.getBands().size(); i++) {
-                MusicBand band = response.getBands().get(i);
-                System.out.println("Band " + i + ":");
-                System.out.println("  ID: " + band.getId());
-                System.out.println("  Name: " + band.getName());
-                System.out.println("  CreationDate: " + band.getCreationDate());
-                System.out.println("  CreationDate is null: " + (band.getCreationDate() == null));
-                if (band.getCreationDate() != null) {
-                    System.out.println("  CreationDate class: " + band.getCreationDate().getClass());
-                    System.out.println("  CreationDate string: " + band.getCreationDate().toString());
-                }
-            }
-
             return Response.ok(response).build();
 
         } catch (IllegalArgumentException e) {
@@ -77,20 +54,49 @@ public class MusicBandResource {
         }
     }
 
-    
     @POST
     @Consumes(MediaType.APPLICATION_XML)
     @Produces(MediaType.APPLICATION_XML)
-    public Response createBand(@Valid MusicBand band) {
+    public Response createBand(String xmlBody) {
         try {
-            if (band == null) {
+            if (xmlBody == null || xmlBody.trim().isEmpty()) {
                 return createErrorResponse(400, "Invalid request body",
-                        "Request body cannot be null");
+                        "Request body cannot be null or empty");
+            }
+
+            int count = countOccurrences(xmlBody, "<musicBand>");
+            if (count > 1) {
+                return createErrorResponse(422, "Multiple bands not allowed",
+                        "Single band creation endpoint accepts only one musicBand element. ");
+            }
+            if (count == 0) {
+                return createErrorResponse(400, "Invalid request body",
+                        "Request body must contain a <musicBand> element");
+            }
+
+            jakarta.xml.bind.JAXBContext jaxbContext = jakarta.xml.bind.JAXBContext.newInstance(MusicBand.class);
+            jakarta.xml.bind.Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
+            java.io.StringReader reader = new java.io.StringReader(xmlBody);
+            MusicBand band = (MusicBand) unmarshaller.unmarshal(reader);
+
+            jakarta.validation.ValidatorFactory factory = jakarta.validation.Validation.buildDefaultValidatorFactory();
+            jakarta.validation.Validator validator = factory.getValidator();
+            java.util.Set<jakarta.validation.ConstraintViolation<MusicBand>> violations = validator.validate(band);
+
+            if (!violations.isEmpty()) {
+                String violationMessages = violations.stream()
+                        .map(v -> v.getPropertyPath() + ": " + v.getMessage())
+                        .reduce((a, b) -> a + "; " + b)
+                        .orElse("Validation failed");
+                return createErrorResponse(422, "Validation failed", violationMessages);
             }
 
             MusicBand created = service.createBand(band);
             return Response.status(Response.Status.CREATED).entity(created).build();
 
+        } catch (jakarta.xml.bind.JAXBException e) {
+            return createErrorResponse(400, "Invalid XML format",
+                    "Failed to parse XML: " + e.getMessage());
         } catch (IllegalArgumentException e) {
             return createErrorResponse(422, "Validation failed", e.getMessage());
         } catch (Exception e) {
@@ -99,7 +105,59 @@ public class MusicBandResource {
         }
     }
 
-    
+    private int countOccurrences(String text, String pattern) {
+        int count = 0;
+        int index = 0;
+        while ((index = text.indexOf(pattern, index)) != -1) {
+            count++;
+            index += pattern.length();
+        }
+        return count;
+    }
+
+    @POST
+    @Path("/bulk")
+    @Consumes(MediaType.APPLICATION_XML)
+    @Produces(MediaType.APPLICATION_XML)
+    public Response createBands(BulkBandsRequest bulkRequest) {
+        try {
+            if (bulkRequest == null || bulkRequest.getBands() == null || bulkRequest.getBands().isEmpty()) {
+                return createErrorResponse(400, "Invalid request body",
+                        "Request body must contain at least one band");
+            }
+
+            List<MusicBand> createdBands = new ArrayList<>();
+            List<String> errors = new ArrayList<>();
+
+            for (int i = 0; i < bulkRequest.getBands().size(); i++) {
+                MusicBand band = bulkRequest.getBands().get(i);
+                try {
+                    MusicBand created = service.createBand(band);
+                    createdBands.add(created);
+                } catch (Exception e) {
+                    errors.add("Band #" + (i + 1) + ": " + e.getMessage());
+                }
+            }
+
+            BulkBandsResponse response = new BulkBandsResponse();
+            response.setSuccessful(createdBands);
+            response.setErrors(errors);
+            response.setTotalProcessed(bulkRequest.getBands().size());
+            response.setSuccessCount(createdBands.size());
+            response.setErrorCount(errors.size());
+
+            if (createdBands.isEmpty()) {
+                return Response.status(422).entity(response).build();
+            }
+
+            return Response.status(Response.Status.CREATED).entity(response).build();
+
+        } catch (Exception e) {
+            return createErrorResponse(500, "Internal server error",
+                    "An unexpected error occurred: " + e.getMessage());
+        }
+    }
+
     @GET
     @Path("/{id}")
     @Produces(MediaType.APPLICATION_XML)
@@ -125,7 +183,6 @@ public class MusicBandResource {
         }
     }
 
-    
     @PUT
     @Path("/{id}")
     @Consumes(MediaType.APPLICATION_XML)
@@ -159,7 +216,6 @@ public class MusicBandResource {
         }
     }
 
-    
     @PATCH
     @Path("/{id}")
     @Consumes(MediaType.APPLICATION_XML)
@@ -193,7 +249,6 @@ public class MusicBandResource {
         }
     }
 
-    
     @DELETE
     @Path("/{id}")
     @Produces(MediaType.APPLICATION_XML)
@@ -219,7 +274,6 @@ public class MusicBandResource {
         }
     }
 
-    
     @GET
     @Path("/statistics/average-participants")
     @Produces(MediaType.APPLICATION_XML)
@@ -227,32 +281,14 @@ public class MusicBandResource {
         try {
             AverageParticipantsResponse response = service.getAverageParticipants();
             return Response.ok(response).build();
-
         } catch (Exception e) {
             return createErrorResponse(500, "Internal server error",
                     "An unexpected error occurred: " + e.getMessage());
         }
     }
 
-    
     private Response createErrorResponse(int code, String message, String details) {
         Error error = new Error(code, message, details);
-        Response.Status status;
-
-        switch (code) {
-            case 400:
-                status = Response.Status.BAD_REQUEST;
-                break;
-            case 404:
-                status = Response.Status.NOT_FOUND;
-                break;
-            case 422:
-                status = Response.Status.fromStatusCode(422);
-                break;
-            default:
-                status = Response.Status.INTERNAL_SERVER_ERROR;
-        }
-
-        return Response.status(status).entity(error).build();
+        return Response.status(code).entity(error).build();
     }
 }

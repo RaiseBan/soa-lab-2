@@ -8,6 +8,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.xml.bind.UnmarshalException;
 
 import java.util.List;
 import java.util.Map;
@@ -35,7 +36,7 @@ public class MusicBandService {
     }
 
     
-    public MusicBand createBand(@Valid @NotNull MusicBand band) {
+    public MusicBand createBand(@Valid @NotNull MusicBand band) throws UnmarshalException {
         
         band.setId(null);
         return repository.create(band);

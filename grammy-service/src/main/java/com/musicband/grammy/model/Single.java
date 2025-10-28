@@ -32,8 +32,7 @@ public class Single {
     private Integer id;
 
     @NotBlank(message = "Title cannot be null or empty")
-    @Size(max = 255, message = "Title cannot exceed 255 characters")
-    @Column(nullable = false, length = 255)
+    @Column(nullable = false, columnDefinition = "TEXT")
     @XmlElement(required = true)
     private String title;
 
